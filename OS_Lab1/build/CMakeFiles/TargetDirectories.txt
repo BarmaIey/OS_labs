@@ -1,5 +1,0 @@
-C:/Users/Ligion/OS_lab/OS_Lab1/build/CMakeFiles/creator.dir
-C:/Users/Ligion/OS_lab/OS_Lab1/build/CMakeFiles/reporter.dir
-C:/Users/Ligion/OS_lab/OS_Lab1/build/CMakeFiles/main_app.dir
-C:/Users/Ligion/OS_lab/OS_Lab1/build/CMakeFiles/edit_cache.dir
-C:/Users/Ligion/OS_lab/OS_Lab1/build/CMakeFiles/rebuild_cache.dir

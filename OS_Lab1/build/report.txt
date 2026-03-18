@@ -1,0 +1,5 @@
+Report for file: data.bin
+ID	Name	Hours	Salary
+---------------------------------
+1	John	10	50
+2	Anna	20	100

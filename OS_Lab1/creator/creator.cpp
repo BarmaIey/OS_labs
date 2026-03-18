@@ -2,12 +2,15 @@
 #include <fstream>
 #include <stdexcept>
 #include <cstring>
+#include <cstdlib> 
 #include "../common/employee.h"
 
 const int MAX_NAME_LENGTH = 10;
 
 Employee readEmployee() {
     Employee emp;
+
+    std::string tempName;
 
     std::cout << "Enter ID: ";
     std::cin >> emp.num;
@@ -17,11 +20,13 @@ Employee readEmployee() {
     }
 
     std::cout << "Enter name: ";
-    std::cin >> emp.name;
+    std::cin >> tempName;
 
-    if (std::strlen(emp.name) >= MAX_NAME_LENGTH) {
-        throw std::runtime_error("Name too long");
+    if (tempName.length() >= MAX_NAME_LENGTH) {
+        throw std::runtime_error("Name too long (max 9 characters)");
     }
+
+    std::strcpy(emp.name, tempName.c_str());
 
     std::cout << "Enter hours: ";
     std::cin >> emp.hours;
@@ -60,7 +65,7 @@ int main(int argc, char* argv[]) {
         }
 
         const char* filename = argv[1];
-        int count = std::atoi(argv[2]);
+        int count = atoi(argv[2]);
 
         if (count <= 0) {
             throw std::runtime_error("Invalid record count");

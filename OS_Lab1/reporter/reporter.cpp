@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
+#include <cstdlib>
 #include "../common/employee.h"
 
 double calculateSalary(double hours, double rate) {
@@ -21,6 +22,7 @@ void generateReport(const char* inputFile, const char* outputFile, double rate) 
     }
 
     out << "Report for file: " << inputFile << "\n";
+    out << "ID\tName\tHours\tSalary\n";
     out << "---------------------------------\n";
 
     Employee emp;
@@ -28,11 +30,8 @@ void generateReport(const char* inputFile, const char* outputFile, double rate) 
     while (in.read(reinterpret_cast<char*>(&emp), sizeof(Employee))) {
         double salary = calculateSalary(emp.hours, rate);
 
-        out << "ID: " << emp.num
-            << ", Name: " << emp.name
-            << ", Hours: " << emp.hours
-            << ", Salary: " << salary
-            << "\n";
+        out << emp.num << "\t" << emp.name << "\t"
+            << emp.hours << "\t" << salary << "\n";
     }
 
     if (!in.eof()) {
@@ -51,7 +50,7 @@ int main(int argc, char* argv[]) {
 
         const char* inputFile = argv[1];
         const char* outputFile = argv[2];
-        double rate = std::atof(argv[3]);
+        double rate = atof(argv[3]);
 
         if (rate <= 0) {
             throw std::runtime_error("Invalid rate");

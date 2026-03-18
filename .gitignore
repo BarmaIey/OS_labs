@@ -1,0 +1,10 @@
+# Зависимости
+node_modules/
+*.log
+
+# Сборка
+*.exe
+*.obj
+*.o
+build/
+.vscode/

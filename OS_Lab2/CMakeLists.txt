@@ -7,4 +7,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(Win32ThreadsLab
     src/main.cpp
+    src/LabContext.h
+    src/ThreadProcedures.cpp
+    src/ThreadProcedures.h
+    src/WinApiError.cpp
+    src/WinApiError.h
 )
+

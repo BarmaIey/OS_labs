@@ -1,3 +1,5 @@
+#include "LabContext.h"
+
 #include <iostream>
 #include <limits>
 
@@ -48,7 +50,10 @@ int main()
 {
     std::cout << "Win32 multithreading laboratory work" << std::endl;
 
+    LabContext context;
+
     int arraySize = ReadBoundedInteger("Enter array size: ", kMinArraySize, kMaxArraySize);
-    
+    context.values.resize(static_cast<size_t>(arraySize));
+
     return EXIT_SUCCESS;
 }

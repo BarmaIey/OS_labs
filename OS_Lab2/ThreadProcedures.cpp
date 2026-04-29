@@ -10,6 +10,7 @@
 namespace
 {
     static const DWORD kMinMaxSleepMs = 7;
+    static const DWORD kAverageSleepMs = 12;
 }
 
 DWORD WINAPI MinMaxThreadProc(LPVOID parameter)
@@ -59,3 +60,32 @@ DWORD WINAPI MinMaxThreadProc(LPVOID parameter)
 
     return 0;
 }
+
+DWORD WINAPI AverageThreadProc(LPVOID parameter)
+{
+    LabContext* context = static_cast<LabContext*>(parameter);
+    if (context == NULL)
+    {
+        return 1;
+    }
+
+    if (context->values.empty())
+    {
+        return 2;
+    }
+
+    double sum = 0.0;
+    for (size_t index = 0; index < context->values.size(); ++index)
+    {
+        sum += static_cast<double>(context->values[index]);
+        Sleep(kAverageSleepMs);
+    }
+
+    context->averageValue = sum / static_cast<double>(context->values.size());
+
+    std::cout << "[average thread] Arithmetic mean = "
+              << context->averageValue << std::endl;
+
+    return 0;
+}
+

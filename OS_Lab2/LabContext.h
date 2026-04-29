@@ -21,6 +21,10 @@ struct LabContext
           averageValue(0.0)
     {
     }
+
+private:
+    LabContext(const LabContext&);
+    LabContext& operator=(const LabContext&);
 };
 
 #endif

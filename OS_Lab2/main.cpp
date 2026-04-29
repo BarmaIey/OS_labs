@@ -1,7 +1,11 @@
 #include "LabContext.h"
+#include "ThreadProcedures.h"
 
+#include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <sstream>
+#include <string>
 
 namespace {
     static const int kMinArraySize = 1;
@@ -44,16 +48,47 @@ namespace {
                       << " and " << maxValue << "." << std::endl;
         }
     }
+
+    void ReadArray(std::vector<int>& values)
+    {
+        for (size_t index = 0; index < values.size(); ++index)
+        {
+            std::ostringstream prompt;
+            prompt << "Enter element [" << index << "]: ";
+            values[index] = ReadInteger(prompt.str());
+        }
+    }
 }
 
 int main()
 {
+    HANDLE minMaxThread = NULL;
+    HANDLE averageThread = NULL;
+
     std::cout << "Win32 multithreading laboratory work" << std::endl;
 
     LabContext context;
 
     int arraySize = ReadBoundedInteger("Enter array size: ", kMinArraySize, kMaxArraySize);
     context.values.resize(static_cast<size_t>(arraySize));
+    ReadArray(context.values);
+
+    minMaxThread = CreateThread(NULL,
+                                    0,
+                                    &MinMaxThreadProc,
+                                    &context,
+                                    0,
+                                    NULL);
+
+    averageThread = CreateThread(NULL,
+                                    0,
+                                    &AverageThreadProc,
+                                    &context,
+                                    0,
+                                    NULL);
+
+    WaitForSingleObject(minMaxThread, INFINITE);
+    WaitForSingleObject(averageThread, INFINITE);
 
     return EXIT_SUCCESS;
 }

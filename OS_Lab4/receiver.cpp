@@ -49,6 +49,16 @@ int main() {
     std::string fileName;
     int recordCount;
 
+    HANDLE mutexHandle;
+    HANDLE emptySemaphore;
+    HANDLE fullSemaphore;
+    HANDLE readySemaphore;
+
+    mutexHandle = NULL;
+    emptySemaphore = NULL;
+    fullSemaphore = NULL;
+    readySemaphore = NULL;
+
     try {
         std::cout << "Enter binary file name: ";
         std::getline(std::cin, fileName);
@@ -62,12 +72,65 @@ int main() {
         }
 
         recordCount = readPositiveInt("Enter record count: ");
-
         createMessageFile(fileName, recordCount);
 
-        std::cout << "Binary message file was created.\n";
+        mutexHandle = CreateMutexA(NULL, FALSE, getMutexName(fileName).c_str());
+
+        if (mutexHandle == NULL) {
+            throw std::runtime_error(getLastErrorMessage("Failed to create mutex."));
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            throw std::runtime_error("Synchronization mutex already exists.");
+        }
+
+        emptySemaphore = CreateSemaphoreA(
+            NULL,
+            recordCount,
+            recordCount,
+            getEmptySemaphoreName(fileName).c_str()
+        );
+
+        if (emptySemaphore == NULL) {
+            throw std::runtime_error(getLastErrorMessage("Failed to create empty semaphore."));
+        }
+
+        fullSemaphore = CreateSemaphoreA(
+            NULL,
+            0,
+            recordCount,
+            getFullSemaphoreName(fileName).c_str()
+        );
+
+        if (fullSemaphore == NULL) {
+            throw std::runtime_error(getLastErrorMessage("Failed to create full semaphore."));
+        }
+
+        readySemaphore = CreateSemaphoreA(
+            NULL,
+            0,
+            1000,
+            getReadySemaphoreName(fileName).c_str()
+        );
+
+        if (readySemaphore == NULL) {
+            throw std::runtime_error(getLastErrorMessage("Failed to create ready semaphore."));
+        }
+
+        std::cout << "1";
+
+        closeHandle(mutexHandle);
+        closeHandle(emptySemaphore);
+        closeHandle(fullSemaphore);
+        closeHandle(readySemaphore);
     } catch (const std::exception& exception) {
         std::cerr << "Fatal error: " << exception.what() << "\n";
+
+        closeHandle(mutexHandle);
+        closeHandle(emptySemaphore);
+        closeHandle(fullSemaphore);
+        closeHandle(readySemaphore);
+        
         return 1;
     }
 

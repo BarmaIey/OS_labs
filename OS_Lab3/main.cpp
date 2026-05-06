@@ -1,6 +1,7 @@
 #include <windows.h>
 
 #include <iostream>
+#include <sstream>
 
 struct MarkerData {
     int id;
@@ -16,6 +17,16 @@ struct MarkerData {
     HANDLE blockedEvent;
     HANDLE continueEvent;
 };
+
+std::string getLastErrorMessage(const std::string& prefix) {
+    DWORD errorCode;
+    std::ostringstream stream;
+
+    errorCode = GetLastError();
+    stream << prefix << " Error code: " << errorCode;
+
+    return stream.str();
+}
 
 void initMarkerData(MarkerData& data) {
     data.id = 0;
@@ -64,6 +75,10 @@ DWORD WINAPI markerThread(LPVOID parameter) {
     try {
         waitResult = WaitForSingleObject(data->startEvent, INFINITE);
 
+        if (waitResult != WAIT_OBJECT_0) {
+            throw std::runtime_error(getLastErrorMessage("Failed to wait start event."));
+        }
+
         srand(static_cast<unsigned int>(data->id));
 
         while (true) {
@@ -90,9 +105,29 @@ DWORD WINAPI markerThread(LPVOID parameter) {
 
                 LeaveCriticalSection(data->criticalSection);
 
+                if (!SetEvent(data->blockedEvent)) {
+                    throw std::runtime_error(getLastErrorMessage("Failed to set blocked event."));
+                }
 
                 waitResult = WaitForSingleObject(data->continueEvent, INFINITE);
 
+                if (waitResult != WAIT_OBJECT_0) {
+                    throw std::runtime_error(getLastErrorMessage("Failed to wait continue event."));
+                }
+
+                if (data->terminate) {
+                    EnterCriticalSection(data->criticalSection);
+
+                    for (i = 0; i < data->arraySize; ++i) {
+                        if (data->array[i] == data->id) {
+                            data->array[i] = 0;
+                        }
+                    }
+
+                    LeaveCriticalSection(data->criticalSection);
+
+                    break;
+                }
             }
         }
     } catch (const std::exception& exception) {

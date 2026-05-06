@@ -52,8 +52,60 @@ int readPositiveInt(const std::string& message) {
     }
 }
 
+DWORD WINAPI markerThread(LPVOID parameter) {
+    MarkerData* data;
+    int randomNumber;
+    int index;
+    int i;
+    DWORD waitResult;
+
+    data = static_cast<MarkerData*>(parameter);
+
+    try {
+        waitResult = WaitForSingleObject(data->startEvent, INFINITE);
+
+        srand(static_cast<unsigned int>(data->id));
+
+        while (true) {
+            randomNumber = rand();
+            index = randomNumber % data->arraySize;
+
+            EnterCriticalSection(data->criticalSection);
+
+            if (data->array[index] == 0) {
+                Sleep(5);
+
+                data->array[index] = data->id;
+                ++data->markedCount;
+
+                Sleep(5);
+
+                LeaveCriticalSection(data->criticalSection);
+            } else {
+                data->blockedIndex = index;
+
+                std::cout << "Marker #" << data->id
+                          << " blocked. Marked count: " << data->markedCount
+                          << ", blocked index: " << data->blockedIndex << "\n";
+
+                LeaveCriticalSection(data->criticalSection);
+
+
+                waitResult = WaitForSingleObject(data->continueEvent, INFINITE);
+
+            }
+        }
+    } catch (const std::exception& exception) {
+        std::cerr << "Marker thread error: " << exception.what() << "\n";
+        return 1;
+    }
+
+    return 0;
+}
+
 
 int main() {
+
     
     return 0;
 }

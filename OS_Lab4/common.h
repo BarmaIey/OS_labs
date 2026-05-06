@@ -31,6 +31,41 @@ std::string getLastErrorMessage(const std::string& prefix) {
     return stream.str();
 }
 
+std::string makeSafeName(const std::string& fileName) {
+    std::string result;
+    size_t i;
+    char ch;
+
+    result = "MsgLab_";
+
+    for (i = 0; i < fileName.size(); ++i) {
+        ch = fileName[i];
+
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            result += ch;
+        } else {
+            result += '_';
+        }
+    }
+
+    return result;
+}
+
+std::string getMutexName(const std::string& fileName) {
+    return makeSafeName(fileName) + "_mutex";
+}
+
+std::string getEmptySemaphoreName(const std::string& fileName) {
+    return makeSafeName(fileName) + "_empty";
+}
+
+std::string getFullSemaphoreName(const std::string& fileName) {
+    return makeSafeName(fileName) + "_full";
+}
+
+std::string getReadySemaphoreName(const std::string& fileName) {
+    return makeSafeName(fileName) + "_ready";
+}
 
 int readPositiveInt(const std::string& message) {
     int value;
@@ -53,5 +88,11 @@ int readPositiveInt(const std::string& message) {
     }
 }
 
+void closeHandle(HANDLE& handle) {
+    if (handle != NULL) {
+        CloseHandle(handle);
+        handle = NULL;
+    }
+}
 
 #endif

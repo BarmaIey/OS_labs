@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 bool fileExists(const std::string& fileName) {
     std::ifstream file;
@@ -44,15 +45,30 @@ void createMessageFile(const std::string& fileName, int maxRecords) {
     file.close();
 }
 
+std::string makeSenderCommandLine(const std::string& fileName) {
+    std::string commandLine;
+
+    commandLine = "Sender.exe \"";
+    commandLine += fileName;
+    commandLine += "\"";
+
+    return commandLine;
+}
 
 int main() {
     std::string fileName;
     int recordCount;
+    int senderCount;
+    int i;
+    int command;
 
     HANDLE mutexHandle;
     HANDLE emptySemaphore;
     HANDLE fullSemaphore;
     HANDLE readySemaphore;
+
+    std::vector<PROCESS_INFORMATION> senderProcesses;
+    std::vector<STARTUPINFOA> startupInfos;
 
     mutexHandle = NULL;
     emptySemaphore = NULL;
@@ -117,7 +133,45 @@ int main() {
             throw std::runtime_error(getLastErrorMessage("Failed to create ready semaphore."));
         }
 
-        std::cout << "1";
+                senderCount = readPositiveInt("Enter sender process count: ");
+
+        senderProcesses.resize(static_cast<size_t>(senderCount));
+        startupInfos.resize(static_cast<size_t>(senderCount));
+
+        for (i = 0; i < senderCount; ++i) {
+            ZeroMemory(&senderProcesses[i], sizeof(PROCESS_INFORMATION));
+            ZeroMemory(&startupInfos[i], sizeof(STARTUPINFOA));
+            startupInfos[i].cb = sizeof(STARTUPINFOA);
+
+            std::string commandLine = makeSenderCommandLine(fileName);
+
+            if (!CreateProcessA(
+                    NULL,
+                    const_cast<char*>(commandLine.c_str()),
+                    NULL,
+                    NULL,
+                    FALSE,
+                    CREATE_NEW_CONSOLE,
+                    NULL,
+                    NULL,
+                    &startupInfos[i],
+                    &senderProcesses[i])) {
+                throw std::runtime_error(getLastErrorMessage("Failed to create sender process."));
+            }
+        }
+
+        for (i = 0; i < senderCount; ++i) {
+            if (WaitForSingleObject(readySemaphore, INFINITE) != WAIT_OBJECT_0) {
+                throw std::runtime_error(getLastErrorMessage("Failed to wait sender readiness."));
+            }
+        }
+
+        std::cout << "All senders are ready.\n";
+
+        for (i = 0; i < senderCount; ++i) {
+            closeHandle(senderProcesses[i].hProcess);
+            closeHandle(senderProcesses[i].hThread);
+        }
 
         closeHandle(mutexHandle);
         closeHandle(emptySemaphore);
@@ -126,11 +180,16 @@ int main() {
     } catch (const std::exception& exception) {
         std::cerr << "Fatal error: " << exception.what() << "\n";
 
+        for (i = 0; i < senderCount; ++i) {
+            closeHandle(senderProcesses[i].hProcess);
+            closeHandle(senderProcesses[i].hThread);
+        }
+
         closeHandle(mutexHandle);
         closeHandle(emptySemaphore);
         closeHandle(fullSemaphore);
         closeHandle(readySemaphore);
-        
+
         return 1;
     }
 

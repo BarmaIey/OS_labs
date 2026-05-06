@@ -1,7 +1,12 @@
 #include <windows.h>
 
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 struct MarkerData {
     int id;
@@ -61,6 +66,18 @@ int readPositiveInt(const std::string& message) {
 
         std::cout << "Invalid value. Please enter a positive integer.\n";
     }
+}
+
+void printArray(const std::vector<int>& array) {
+    size_t i;
+
+    std::cout << "Array: ";
+
+    for (i = 0; i < array.size(); ++i) {
+        std::cout << array[i] << ' ';
+    }
+
+    std::cout << "\n";
 }
 
 DWORD WINAPI markerThread(LPVOID parameter) {
@@ -138,9 +155,203 @@ DWORD WINAPI markerThread(LPVOID parameter) {
     return 0;
 }
 
+void closeHandles(std::vector<HANDLE>& handles) {
+    size_t i;
+
+    for (i = 0; i < handles.size(); ++i) {
+        if (handles[i] != NULL) {
+            CloseHandle(handles[i]);
+            handles[i] = NULL;
+        }
+    }
+}
+
 
 int main() {
+    int arraySize;
+    int markerCount;
+    int activeMarkers;
+    int markerToStop;
+    int i;
 
-    
+    CRITICAL_SECTION criticalSection;
+    bool criticalSectionInitialized;
+
+    std::vector<int> array;
+    std::vector<MarkerData> markerData;
+
+    std::vector<HANDLE> threads;
+    std::vector<HANDLE> startEvents;
+    std::vector<HANDLE> blockedEvents;
+    std::vector<HANDLE> continueEvents;
+    std::vector<HANDLE> currentBlockedEvents;
+
+    HANDLE thread;
+    DWORD waitResult;
+
+    criticalSectionInitialized = false;
+
+    try {
+        arraySize = readPositiveInt("Enter array size: ");
+        markerCount = readPositiveInt("Enter marker thread count: ");
+
+        if (markerCount > MAXIMUM_WAIT_OBJECTS) {
+            throw std::runtime_error("Too many marker threads. Maximum is 64.");
+        }
+
+        array.assign(static_cast<size_t>(arraySize), 0);
+
+        markerData.resize(static_cast<size_t>(markerCount));
+        threads.assign(static_cast<size_t>(markerCount), NULL);
+        startEvents.assign(static_cast<size_t>(markerCount), NULL);
+        blockedEvents.assign(static_cast<size_t>(markerCount), NULL);
+        continueEvents.assign(static_cast<size_t>(markerCount), NULL);
+
+        InitializeCriticalSection(&criticalSection);
+        criticalSectionInitialized = true;
+
+        for (i = 0; i < markerCount; ++i) {
+            initMarkerData(markerData[i]);
+
+            startEvents[i] = CreateEvent(NULL, TRUE, FALSE, NULL);
+            blockedEvents[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
+            continueEvents[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+            if (startEvents[i] == NULL || blockedEvents[i] == NULL || continueEvents[i] == NULL) {
+                throw std::runtime_error(getLastErrorMessage("Failed to create event."));
+            }
+
+            markerData[i].id = i + 1;
+            markerData[i].arraySize = arraySize;
+            markerData[i].array = &array[0];
+            markerData[i].criticalSection = &criticalSection;
+            markerData[i].startEvent = startEvents[i];
+            markerData[i].blockedEvent = blockedEvents[i];
+            markerData[i].continueEvent = continueEvents[i];
+
+            thread = CreateThread(
+                NULL,
+                0,
+                markerThread,
+                &markerData[i],
+                0,
+                NULL
+            );
+
+            if (thread == NULL) {
+                throw std::runtime_error(getLastErrorMessage("Failed to create marker thread."));
+            }
+
+            threads[i] = thread;
+        }
+
+        for (i = 0; i < markerCount; ++i) {
+            if (!SetEvent(startEvents[i])) {
+                throw std::runtime_error(getLastErrorMessage("Failed to set start event."));
+            }
+        }
+
+        activeMarkers = markerCount;
+
+        while (activeMarkers > 0) {
+            currentBlockedEvents.clear();
+
+            for (i = 0; i < markerCount; ++i) {
+                if (!markerData[i].terminate) {
+                    currentBlockedEvents.push_back(blockedEvents[i]);
+                }
+            }
+
+            waitResult = WaitForMultipleObjects(
+                static_cast<DWORD>(currentBlockedEvents.size()),
+                &currentBlockedEvents[0],
+                TRUE,
+                INFINITE
+            );
+
+            if (waitResult == WAIT_FAILED) {
+                throw std::runtime_error(getLastErrorMessage("Failed to wait marker events."));
+            }
+
+            printArray(array);
+
+            std::cout << "Available markers: ";
+
+            for (i = 0; i < markerCount; ++i) {
+                if (!markerData[i].terminate) {
+                    std::cout << markerData[i].id << ' ';
+                }
+            }
+
+            std::cout << "\n";
+
+            while (true) {
+                std::cout << "Enter marker number to stop: ";
+                std::cin >> markerToStop;
+
+                if (!std::cin.fail()
+                    && markerToStop >= 1
+                    && markerToStop <= markerCount
+                    && !markerData[markerToStop - 1].terminate) {
+                    break;
+                }
+
+                std::cin.clear();
+                std::cin.ignore(10000, '\n');
+
+                std::cout << "Invalid marker number. Try again.\n";
+            }
+
+            markerData[markerToStop - 1].terminate = true;
+
+            if (!SetEvent(markerData[markerToStop - 1].continueEvent)) {
+                throw std::runtime_error(getLastErrorMessage("Failed to stop selected marker."));
+            }
+
+            waitResult = WaitForSingleObject(threads[markerToStop - 1], INFINITE);
+
+            if (waitResult != WAIT_OBJECT_0) {
+                throw std::runtime_error(getLastErrorMessage("Failed to wait selected marker thread."));
+            }
+
+            --activeMarkers;
+
+            printArray(array);
+
+            for (i = 0; i < markerCount; ++i) {
+                if (!markerData[i].terminate) {
+                    if (!SetEvent(markerData[i].continueEvent)) {
+                        throw std::runtime_error(getLastErrorMessage("Failed to continue marker thread."));
+                    }
+                }
+            }
+        }
+
+        closeHandles(threads);
+        closeHandles(startEvents);
+        closeHandles(blockedEvents);
+        closeHandles(continueEvents);
+
+        if (criticalSectionInitialized) {
+            DeleteCriticalSection(&criticalSection);
+            criticalSectionInitialized = false;
+        }
+
+        std::cout << "All marker threads finished.\n";
+    } catch (const std::exception& exception) {
+        std::cerr << "Fatal error: " << exception.what() << "\n";
+
+        closeHandles(threads);
+        closeHandles(startEvents);
+        closeHandles(blockedEvents);
+        closeHandles(continueEvents);
+
+        if (criticalSectionInitialized) {
+            DeleteCriticalSection(&criticalSection);
+        }
+
+        return 1;
+    }
+
     return 0;
 }

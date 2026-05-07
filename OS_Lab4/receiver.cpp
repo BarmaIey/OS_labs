@@ -1,7 +1,6 @@
 #include "common.h"
 
 #include <fstream>
-#include <iostream>
 #include <vector>
 
 bool fileExists(const std::string& fileName) {
@@ -53,6 +52,47 @@ std::string makeSenderCommandLine(const std::string& fileName) {
     commandLine += "\"";
 
     return commandLine;
+}
+
+void readMessageFromFile(const std::string& fileName) {
+    std::fstream file;
+    FileHeader header;
+    MessageRecord record;
+    long position;
+    int i;
+
+    file.open(fileName.c_str(), std::ios::in | std::ios::out | std::ios::binary);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open binary file for reading.");
+    }
+
+    file.read(reinterpret_cast<char*>(&header), sizeof(FileHeader));
+
+    position = static_cast<long>(sizeof(FileHeader))
+        + static_cast<long>(header.readIndex) * static_cast<long>(sizeof(MessageRecord));
+
+    file.seekg(position, std::ios::beg);
+    file.read(reinterpret_cast<char*>(&record), sizeof(MessageRecord));
+
+    header.readIndex = (header.readIndex + 1) % header.maxRecords;
+
+    file.seekp(0, std::ios::beg);
+    file.write(reinterpret_cast<char*>(&header), sizeof(FileHeader));
+
+    if (!file.good()) {
+        throw std::runtime_error("Failed to read message from file.");
+    }
+
+    std::cout << "Received message: ";
+
+    for (i = 0; i < MESSAGE_SIZE && record.text[i] != '\0'; ++i) {
+        std::cout << record.text[i];
+    }
+
+    std::cout << "\n";
+
+    file.close();
 }
 
 int main() {
@@ -133,7 +173,7 @@ int main() {
             throw std::runtime_error(getLastErrorMessage("Failed to create ready semaphore."));
         }
 
-                senderCount = readPositiveInt("Enter sender process count: ");
+        senderCount = readPositiveInt("Enter sender process count: ");
 
         senderProcesses.resize(static_cast<size_t>(senderCount));
         startupInfos.resize(static_cast<size_t>(senderCount));
@@ -167,6 +207,46 @@ int main() {
         }
 
         std::cout << "All senders are ready.\n";
+
+        while (true) {
+            std::cout << "\n1 - read message\n";
+            std::cout << "2 - exit\n";
+            std::cout << "Enter command: ";
+            std::cin >> command;
+
+            if (std::cin.fail()) {
+                std::cin.clear();
+                std::cin.ignore(10000, '\n');
+                std::cout << "Invalid command.\n";
+                continue;
+            }
+
+            if (command == 1) {
+                if (WaitForSingleObject(fullSemaphore, INFINITE) != WAIT_OBJECT_0) {
+                    throw std::runtime_error(getLastErrorMessage("Failed to wait full semaphore."));
+                }
+
+                if (WaitForSingleObject(mutexHandle, INFINITE) != WAIT_OBJECT_0) {
+                    throw std::runtime_error(getLastErrorMessage("Failed to wait mutex."));
+                }
+
+                readMessageFromFile(fileName);
+
+                if (!ReleaseMutex(mutexHandle)) {
+                    throw std::runtime_error(getLastErrorMessage("Failed to release mutex."));
+                }
+
+                if (!ReleaseSemaphore(emptySemaphore, 1, NULL)) {
+                    throw std::runtime_error(getLastErrorMessage("Failed to release empty semaphore."));
+                }
+            } else if (command == 2) {
+                break;
+            } else {
+                std::cout << "Unknown command.\n";
+            }
+        }
+
+        std::cout << "Receiver is finishing. Please close sender windows manually if they are still running.\n";
 
         for (i = 0; i < senderCount; ++i) {
             closeHandle(senderProcesses[i].hProcess);

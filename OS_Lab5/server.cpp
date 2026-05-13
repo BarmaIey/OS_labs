@@ -345,14 +345,13 @@ void createInitialEmployeeFile(
     saveEmployeesToFile(fileName, employees);
 }
 
-int main()
-{
+int main() {
     std::string fileName;
     std::string pipeName;
     int clientCount;
+    int initializedLockCount = 0;
     int i;
     int command;
-    int initializedLockCount = 0;
 
     std::vector<employee> employees;
     std::vector<RecordLock> locks;
@@ -464,7 +463,7 @@ int main()
 
         std::cout << "\nAll client processes were started.\n";
 
-         while (true) {
+        while (true) {
             std::cout << "\n1 - print file\n";
             std::cout << "2 - exit server\n";
             std::cout << "Enter command: ";
@@ -506,7 +505,7 @@ int main()
             closeHandle(clientProcesses[static_cast<size_t>(i)].hThread);
         }
 
-        for (i = 0; i < initializedLockCount; ++i) {
+        for (i = 0; i < static_cast<int>(locks.size()); ++i) {
             destroyRecordLock(locks[static_cast<size_t>(i)]);
         }
 
@@ -529,7 +528,6 @@ int main()
 
         return 1;
     }
-
 
     return 0;
 }

@@ -14,6 +14,7 @@ The project currently includes:
 * **Lab #3 — Thread Synchronization**
 * **Lab #4 — Processes Synchronization**
 * **Lab #5 — Named Pipes**
+
 Each lab demonstrates a specific OS concept:
 
 * process creation and management,

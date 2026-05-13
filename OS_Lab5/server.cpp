@@ -11,6 +11,13 @@ struct RecordLock {
     HANDLE canWrite;
 };
 
+struct ClientThreadData {
+    HANDLE pipe;
+    std::string fileName;
+    std::vector<employee>* employees;
+    std::vector<RecordLock>* locks;
+};
+
 bool fileExists(const std::string& fileName) {
     std::ifstream file;
 
@@ -128,6 +135,161 @@ void printEmployees(const std::vector<employee>& employees) {
     }
 }
 
+int findEmployeeIndexById(const std::vector<employee>& employees, int id) {
+    size_t i;
+
+    for (i = 0; i < employees.size(); ++i) {
+        if (employees[i].num == id) {
+            return static_cast<int>(i);
+        }
+    }
+
+    return -1;
+}
+
+void sendError(HANDLE pipe, const std::string& text) {
+    PipeMessage response;
+
+    clearMessage(response);
+    response.status = RESPONSE_ERROR;
+    copyStringToCharArray(response.text, 128, text);
+
+    writePipeMessage(pipe, response);
+}
+
+DWORD WINAPI clientThread(LPVOID parameter) {
+    ClientThreadData* data;
+    PipeMessage request;
+    PipeMessage response;
+    int index;
+    bool hasReadLock;
+    bool hasWriteLock;
+    int lockedIndex;
+
+    data = static_cast<ClientThreadData*>(parameter);
+
+    hasReadLock = false;
+    hasWriteLock = false;
+    lockedIndex = -1;
+
+    try {
+        while (true) {
+            if (!readPipeMessage(data->pipe, request)) {
+                break;
+            }
+
+            if (request.command == REQUEST_EXIT) {
+                break;
+            }
+
+            if (request.command == REQUEST_READ) {
+                index = findEmployeeIndexById(*(data->employees), request.id);
+
+                if (index == -1) {
+                    sendError(data->pipe, "Employee was not found.");
+                    continue;
+                }
+
+                beginRead((*(data->locks))[static_cast<size_t>(index)]);
+
+                hasReadLock = true;
+                hasWriteLock = false;
+                lockedIndex = index;
+
+                clearMessage(response);
+                response.status = RESPONSE_OK;
+                response.data = (*(data->employees))[static_cast<size_t>(index)];
+
+                if (!writePipeMessage(data->pipe, response)) {
+                    break;
+                }
+            } else if (request.command == REQUEST_RELEASE_READ) {
+                if (hasReadLock && lockedIndex >= 0) {
+                    endRead((*(data->locks))[static_cast<size_t>(lockedIndex)]);
+                }
+
+                hasReadLock = false;
+                lockedIndex = -1;
+
+                clearMessage(response);
+                response.status = RESPONSE_OK;
+                copyStringToCharArray(response.text, 128, "Read access was released.");
+                writePipeMessage(data->pipe, response);
+            } else if (request.command == REQUEST_WRITE) {
+                index = findEmployeeIndexById(*(data->employees), request.id);
+
+                if (index == -1) {
+                    sendError(data->pipe, "Employee was not found.");
+                    continue;
+                }
+
+                beginWrite((*(data->locks))[static_cast<size_t>(index)]);
+
+                hasWriteLock = true;
+                hasReadLock = false;
+                lockedIndex = index;
+
+                clearMessage(response);
+                response.status = RESPONSE_OK;
+                response.data = (*(data->employees))[static_cast<size_t>(index)];
+
+                if (!writePipeMessage(data->pipe, response)) {
+                    break;
+                }
+            } else if (request.command == REQUEST_RELEASE_WRITE) {
+                if (hasWriteLock && lockedIndex >= 0) {
+                    (*(data->employees))[static_cast<size_t>(lockedIndex)] = request.data;
+                    saveEmployeesToFile(data->fileName, *(data->employees));
+                    endWrite((*(data->locks))[static_cast<size_t>(lockedIndex)]);
+                }
+
+                hasWriteLock = false;
+                lockedIndex = -1;
+
+                clearMessage(response);
+                response.status = RESPONSE_OK;
+                copyStringToCharArray(response.text, 128, "Write access was released.");
+                writePipeMessage(data->pipe, response);
+            } else {
+                sendError(data->pipe, "Unknown request.");
+            }
+        }
+
+        if (hasReadLock && lockedIndex >= 0) {
+            endRead((*(data->locks))[static_cast<size_t>(lockedIndex)]);
+        }
+
+        if (hasWriteLock && lockedIndex >= 0) {
+            endWrite((*(data->locks))[static_cast<size_t>(lockedIndex)]);
+        }
+
+        FlushFileBuffers(data->pipe);
+        DisconnectNamedPipe(data->pipe);
+        closeHandle(data->pipe);
+
+        delete data;
+    } catch (const std::exception& exception) {
+        std::cerr << "Client thread error: " << exception.what() << "\n";
+
+        if (hasReadLock && lockedIndex >= 0) {
+            endRead((*(data->locks))[static_cast<size_t>(lockedIndex)]);
+        }
+
+        if (hasWriteLock && lockedIndex >= 0) {
+            endWrite((*(data->locks))[static_cast<size_t>(lockedIndex)]);
+        }
+
+        if (data != NULL) {
+            closeHandle(data->pipe);
+            delete data;
+        }
+
+        return 1;
+    }
+
+    return 0;
+}
+
 std::string makeClientCommandLine(const std::string& pipeName) {
     std::string commandLine;
 
@@ -197,6 +359,7 @@ int main()
 
     std::vector<PROCESS_INFORMATION> clientProcesses;
     std::vector<STARTUPINFOA> startupInfos;
+    std::vector<HANDLE> pipes;
 
     try {
         pipeName = "\\\\.\\pipe\\EmployeePipeLab";

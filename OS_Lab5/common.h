@@ -115,4 +115,33 @@ void printEmployee(const employee& item) {
               << ", hours: " << item.hours << "\n";
 }
 
+bool writePipeMessage(HANDLE pipe, const PipeMessage& message) {
+    DWORD bytesWritten;
+
+    bytesWritten = 0;
+
+    return WriteFile(
+        pipe,
+        &message,
+        sizeof(PipeMessage),
+        &bytesWritten,
+        NULL
+    ) && bytesWritten == sizeof(PipeMessage);
+}
+
+bool readPipeMessage(HANDLE pipe, PipeMessage& message) {
+    DWORD bytesRead;
+
+    bytesRead = 0;
+    clearMessage(message);
+
+    return ReadFile(
+        pipe,
+        &message,
+        sizeof(PipeMessage),
+        &bytesRead,
+        NULL
+    ) && bytesRead == sizeof(PipeMessage);
+}
+
 #endif

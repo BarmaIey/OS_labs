@@ -128,6 +128,16 @@ void printEmployees(const std::vector<employee>& employees) {
     }
 }
 
+std::string makeClientCommandLine(const std::string& pipeName) {
+    std::string commandLine;
+
+    commandLine = "Client.exe \"";
+    commandLine += pipeName;
+    commandLine += "\"";
+
+    return commandLine;
+}
+
 void createInitialEmployeeFile(
     const std::string& fileName,
     std::vector<employee>& employees
@@ -180,9 +190,13 @@ int main()
     int clientCount;
     int i;
     int command;
+    int initializedLockCount = 0;
 
     std::vector<employee> employees;
     std::vector<RecordLock> locks;
+
+    std::vector<PROCESS_INFORMATION> clientProcesses;
+    std::vector<STARTUPINFOA> startupInfos;
 
     try {
         pipeName = "\\\\.\\pipe\\EmployeePipeLab";
@@ -204,16 +218,78 @@ int main()
 
         for (i = 0; i < static_cast<int>(locks.size()); ++i) {
             initRecordLock(locks[static_cast<size_t>(i)]);
+            ++initializedLockCount;
         }
 
         printEmployees(employees);
 
-        for (i = 0; i < static_cast<int>(locks.size()); ++i) {
+        clientCount = readPositiveInt("\nEnter client process count: ");
+
+        clientProcesses.resize(static_cast<size_t>(clientCount));
+        startupInfos.resize(static_cast<size_t>(clientCount));
+
+        for (i = 0; i < clientCount; ++i) {
+            std::string commandLine;
+
+            ZeroMemory(
+                &clientProcesses[static_cast<size_t>(i)],
+                sizeof(PROCESS_INFORMATION)
+            );
+
+            ZeroMemory(
+                &startupInfos[static_cast<size_t>(i)],
+                sizeof(STARTUPINFOA)
+            );
+
+            startupInfos[static_cast<size_t>(i)].cb =
+                sizeof(STARTUPINFOA);
+
+            commandLine = makeClientCommandLine(pipeName);
+
+            if (!CreateProcessA(
+                    NULL,
+                    const_cast<char*>(commandLine.c_str()),
+                    NULL,
+                    NULL,
+                    FALSE,
+                    CREATE_NEW_CONSOLE,
+                    NULL,
+                    NULL,
+                    &startupInfos[static_cast<size_t>(i)],
+                    &clientProcesses[static_cast<size_t>(i)])) {
+
+                throw std::runtime_error(
+                    getLastErrorMessage(
+                        "Failed to create client process."
+                    )
+                );
+            }
+        }
+
+        std::cout << "\nAll client processes were started.\n";
+
+        for (i = 0; i < static_cast<int>(clientProcesses.size()); ++i) {
+            closeHandle(clientProcesses[static_cast<size_t>(i)].hProcess);
+            closeHandle(clientProcesses[static_cast<size_t>(i)].hThread);
+        }
+
+        for (i = 0; i < initializedLockCount; ++i) {
             destroyRecordLock(locks[static_cast<size_t>(i)]);
         }
 
-        } catch (const std::exception& exception) {
+        std::cout << "Server finished.\n";
+    } catch (const std::exception& exception) {
         std::cerr << "Fatal error: " << exception.what() << "\n";
+
+        for (i = 0; i < static_cast<int>(clientProcesses.size()); ++i) {
+            closeHandle(clientProcesses[static_cast<size_t>(i)].hProcess);
+            closeHandle(clientProcesses[static_cast<size_t>(i)].hThread);
+        }
+
+        for (i = 0; i < initializedLockCount; ++i) {
+            destroyRecordLock(locks[static_cast<size_t>(i)]);
+        }
+
         return 1;
     }
 

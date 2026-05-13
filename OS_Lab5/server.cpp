@@ -356,10 +356,9 @@ int main()
 
     std::vector<employee> employees;
     std::vector<RecordLock> locks;
-
+    std::vector<HANDLE> serverThreads;
     std::vector<PROCESS_INFORMATION> clientProcesses;
     std::vector<STARTUPINFOA> startupInfos;
-    std::vector<HANDLE> pipes;
 
     try {
         pipeName = "\\\\.\\pipe\\EmployeePipeLab";
@@ -388,24 +387,34 @@ int main()
 
         clientCount = readPositiveInt("\nEnter client process count: ");
 
+        serverThreads.resize(static_cast<size_t>(clientCount), NULL);
         clientProcesses.resize(static_cast<size_t>(clientCount));
         startupInfos.resize(static_cast<size_t>(clientCount));
 
         for (i = 0; i < clientCount; ++i) {
+            HANDLE pipe;
+            ClientThreadData* threadData;
+            DWORD threadId;
             std::string commandLine;
 
-            ZeroMemory(
-                &clientProcesses[static_cast<size_t>(i)],
-                sizeof(PROCESS_INFORMATION)
+            pipe = CreateNamedPipeA(
+                pipeName.c_str(),
+                PIPE_ACCESS_DUPLEX,
+                PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+                clientCount,
+                PIPE_BUFFER_SIZE,
+                PIPE_BUFFER_SIZE,
+                0,
+                NULL
             );
 
-            ZeroMemory(
-                &startupInfos[static_cast<size_t>(i)],
-                sizeof(STARTUPINFOA)
-            );
+            if (pipe == INVALID_HANDLE_VALUE) {
+                throw std::runtime_error(getLastErrorMessage("Failed to create named pipe."));
+            }
 
-            startupInfos[static_cast<size_t>(i)].cb =
-                sizeof(STARTUPINFOA);
+            ZeroMemory(&clientProcesses[static_cast<size_t>(i)], sizeof(PROCESS_INFORMATION));
+            ZeroMemory(&startupInfos[static_cast<size_t>(i)], sizeof(STARTUPINFOA));
+            startupInfos[static_cast<size_t>(i)].cb = sizeof(STARTUPINFOA);
 
             commandLine = makeClientCommandLine(pipeName);
 
@@ -420,16 +429,44 @@ int main()
                     NULL,
                     &startupInfos[static_cast<size_t>(i)],
                     &clientProcesses[static_cast<size_t>(i)])) {
+                closeHandle(pipe);
+                throw std::runtime_error(getLastErrorMessage("Failed to create client process."));
+            }
 
-                throw std::runtime_error(
-                    getLastErrorMessage(
-                        "Failed to create client process."
-                    )
-                );
+            if (!ConnectNamedPipe(pipe, NULL)) {
+                if (GetLastError() != ERROR_PIPE_CONNECTED) {
+                    closeHandle(pipe);
+                    throw std::runtime_error(getLastErrorMessage("Failed to connect named pipe."));
+                }
+            }
+
+            threadData = new ClientThreadData;
+            threadData->pipe = pipe;
+            threadData->fileName = fileName;
+            threadData->employees = &employees;
+            threadData->locks = &locks;
+
+            serverThreads[static_cast<size_t>(i)] = CreateThread(
+                NULL,
+                0,
+                clientThread,
+                threadData,
+                0,
+                &threadId
+            );
+
+            if (serverThreads[static_cast<size_t>(i)] == NULL) {
+                closeHandle(pipe);
+                delete threadData;
+                throw std::runtime_error(getLastErrorMessage("Failed to create server thread."));
             }
         }
 
         std::cout << "\nAll client processes were started.\n";
+
+        for (i = 0; i < static_cast<int>(serverThreads.size()); ++i) {
+            closeHandle(serverThreads[static_cast<size_t>(i)]);
+        }
 
         for (i = 0; i < static_cast<int>(clientProcesses.size()); ++i) {
             closeHandle(clientProcesses[static_cast<size_t>(i)].hProcess);
@@ -443,6 +480,10 @@ int main()
         std::cout << "Server finished.\n";
     } catch (const std::exception& exception) {
         std::cerr << "Fatal error: " << exception.what() << "\n";
+
+        for (i = 0; i < static_cast<int>(serverThreads.size()); ++i) {
+            closeHandle(serverThreads[static_cast<size_t>(i)]);
+        }
 
         for (i = 0; i < static_cast<int>(clientProcesses.size()); ++i) {
             closeHandle(clientProcesses[static_cast<size_t>(i)].hProcess);

@@ -464,6 +464,39 @@ int main()
 
         std::cout << "\nAll client processes were started.\n";
 
+         while (true) {
+            std::cout << "\n1 - print file\n";
+            std::cout << "2 - exit server\n";
+            std::cout << "Enter command: ";
+            std::cin >> command;
+
+            if (std::cin.fail()) {
+                std::cin.clear();
+                std::cin.ignore(10000, '\n');
+                std::cout << "Invalid command.\n";
+                continue;
+            }
+
+            if (command == 1) {
+                printEmployees(employees);
+            } else if (command == 2) {
+                break;
+            } else {
+                std::cout << "Unknown command.\n";
+            }
+        }
+
+        std::cout << "Waiting for clients to finish...\n";
+
+        WaitForMultipleObjects(
+            static_cast<DWORD>(serverThreads.size()),
+            &serverThreads[0],
+            TRUE,
+            INFINITE
+        );
+
+        printEmployees(employees);
+
         for (i = 0; i < static_cast<int>(serverThreads.size()); ++i) {
             closeHandle(serverThreads[static_cast<size_t>(i)]);
         }

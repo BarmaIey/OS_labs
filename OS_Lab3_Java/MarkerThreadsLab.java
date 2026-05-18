@@ -144,15 +144,54 @@ public class MarkerThreadsLab {
     }
 
     private static void printArray(int[] array) {
-        int i;
+        synchronized (arrayLock) {
+            System.out.print("Array: ");
 
-        System.out.print("Array: ");
+            for (int i = 0; i < array.length; i++) {
+                System.out.print(array[i] + " ");
+            }
 
-        for (i = 0; i < array.length; i++) {
-            System.out.print(array[i] + " ");
+            System.out.println();
+        }
+    }
+
+    private static void printAvailableMarkers(List<MarkerData> markerDataList) {
+        System.out.print("Available markers: ");
+
+        for (int i = 0; i < markerDataList.size(); i++) {
+            MarkerData data = markerDataList.get(i);
+
+            if (!data.terminated) {
+                System.out.print(data.id + " ");
+            }
         }
 
         System.out.println();
+    }
+
+    private static int readMarkerToStop(
+        Scanner scanner,
+        List<MarkerData> markerDataList
+    ) {
+        int markerToStop;
+
+        while (true) {
+            System.out.print("Enter marker number to stop: ");
+
+            if (scanner.hasNextInt()) {
+                markerToStop = scanner.nextInt();
+
+                if (markerToStop >= 1
+                    && markerToStop <= markerDataList.size()
+                    && !markerDataList.get(markerToStop - 1).terminated) {
+                    return markerToStop;
+                }
+            } else {
+                scanner.next();
+            }
+
+            System.out.println("Invalid marker number. Try again.");
+        }
     }
 
     public static void main(String[] args) {
@@ -174,6 +213,48 @@ public class MarkerThreadsLab {
             markerThreads.add(thread);
 
             thread.start();
+        }
+
+        int activeMarkers = markerCount;
+
+        try {
+            while (activeMarkers > 0) {
+                synchronized (coordinatorLock) {
+                    while (blockedThreadCount < activeMarkers) {
+                        coordinatorLock.wait();
+                    }
+                }
+
+                printArray(array);
+                printAvailableMarkers(markerDataList);
+
+                int markerToStop = readMarkerToStop(scanner, markerDataList);
+                MarkerThread selectedThread = markerThreads.get(markerToStop - 1);
+
+                selectedThread.sendTerminateSignal();
+                selectedThread.join();
+
+                activeMarkers--;
+
+                printArray(array);
+
+                synchronized (coordinatorLock) {
+                    blockedThreadCount = 0;
+                }
+
+                for (int i = 0; i < markerThreads.size(); i++) {
+                    MarkerData data = markerDataList.get(i);
+
+                    if (!data.terminated) {
+                        markerThreads.get(i).sendContinueSignal();
+                    }
+                }
+            }
+
+            System.out.println("All marker threads finished.");
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            System.err.println("Main thread was interrupted.");
         }
 
         scanner.close();

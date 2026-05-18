@@ -41,6 +41,22 @@ public class MarkerThreadsLab {
             this.shouldTerminate = false;
         }
 
+        public void sendContinueSignal() {
+            synchronized (commandLock) {
+                hasCommand = true;
+                shouldTerminate = false;
+                commandLock.notify();
+            }
+        }
+
+        public void sendTerminateSignal() {
+            synchronized (commandLock) {
+                hasCommand = true;
+                shouldTerminate = true;
+                commandLock.notify();
+            }
+        }
+
         @Override
         public void run() {
             Random random = new Random(data.id);

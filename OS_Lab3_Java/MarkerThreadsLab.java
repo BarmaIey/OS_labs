@@ -2,15 +2,20 @@ package OS_Lab3_Java;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.Scanner;
 
 public class MarkerThreadsLab {
+    private static final Object arrayLock = new Object();
+    private static final Object coordinatorLock = new Object();
+
+    private static int blockedThreadCount = 0;
 
     private static class MarkerData {
-    int id;
-    int markedCount;
-    int blockedIndex;
-    boolean terminated;
+        int id;
+        int markedCount;
+        int blockedIndex;
+        boolean terminated;
 
         MarkerData(int id) {
             this.id = id;
@@ -23,17 +28,77 @@ public class MarkerThreadsLab {
     private static class MarkerThread extends Thread {
         private final MarkerData data;
         private final int[] array;
+        private final Object commandLock;
+
+        private boolean hasCommand;
+        private boolean shouldTerminate;
 
         MarkerThread(MarkerData data, int[] array) {
             this.data = data;
             this.array = array;
+            this.commandLock = new Object();
+            this.hasCommand = false;
+            this.shouldTerminate = false;
         }
 
         @Override
         public void run() {
-            System.out.println(
-                "Marker thread #" + data.id + " started."
-            );
+            Random random = new Random(data.id);
+
+            try {
+                while (true) {
+                    int index = random.nextInt(array.length);
+
+                    synchronized (arrayLock) {
+                        if (array[index] == 0) {
+                            Thread.sleep(5);
+
+                            array[index] = data.id;
+                            data.markedCount++;
+
+                            Thread.sleep(5);
+                            continue;
+                        }
+
+                        data.blockedIndex = index;
+
+                        System.out.println(
+                            "Marker #" + data.id
+                            + " blocked. Marked count: " + data.markedCount
+                            + ", blocked index: " + data.blockedIndex
+                        );
+                    }
+
+                    synchronized (coordinatorLock) {
+                        blockedThreadCount++;
+                        coordinatorLock.notifyAll();
+                    }
+
+                    synchronized (commandLock) {
+                        while (!hasCommand) {
+                            commandLock.wait();
+                        }
+
+                        hasCommand = false;
+
+                        if (shouldTerminate) {
+                            synchronized (arrayLock) {
+                                for (int i = 0; i < array.length; i++) {
+                                    if (array[i] == data.id) {
+                                        array[i] = 0;
+                                    }
+                                }
+                            }
+
+                            data.terminated = true;
+                            break;
+                        }
+                    }
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                System.err.println("Marker thread was interrupted.");
+            }
         }
     }
 

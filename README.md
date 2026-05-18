@@ -182,6 +182,154 @@ The implementation uses:
 
 ---
 
+## ☕ Java vs C++ (WinAPI) Comparison
+
+Lab #3 was implemented both in:
+
+* C++ using WinAPI synchronization primitives,
+* Java using JVM threading primitives.
+
+The goal of the comparison was to evaluate how language/runtime abstractions affect:
+
+* implementation complexity,
+* synchronization logic,
+* resource management,
+* code maintainability.
+
+---
+
+### Common Logic
+
+Despite different APIs, both implementations use the same algorithm:
+
+* multiple marker threads,
+* shared integer array,
+* synchronized access to shared memory,
+* blocking on occupied array elements,
+* coordinated thread termination,
+* deadlock-style waiting workflow.
+
+From the algorithmic point of view, both implementations are almost identical.
+
+The overall cyclomatic complexity remained nearly the same because:
+
+* thread coordination logic did not change,
+* synchronization states remained identical,
+* the same edge cases had to be handled.
+
+---
+
+### C++ (WinAPI) Version
+
+The C++ implementation uses low-level WinAPI primitives:
+
+* `CreateThread`
+* `CreateEvent`
+* `WaitForSingleObject`
+* `CRITICAL_SECTION`
+
+Advantages:
+
+* direct OS-level control,
+* explicit synchronization management,
+* better understanding of Windows threading internals.
+
+Disadvantages:
+
+* significantly more boilerplate,
+* manual HANDLE management,
+* explicit cleanup requirements,
+* more error-prone synchronization code.
+
+The implementation required careful handling of:
+
+* HANDLE lifetime,
+* event resetting/signaling,
+* thread cleanup,
+* WinAPI error codes.
+
+Approximate metrics:
+
+| Metric | Value |
+|---|---|
+| Lines of code | ~330 |
+| Synchronization primitives | High |
+| Boilerplate level | High |
+| Resource leak risk | Moderate |
+
+---
+
+### Java Version
+
+The Java implementation uses JVM synchronization mechanisms:
+
+* `Thread`
+* `synchronized`
+* `wait()`
+* `notify()`
+
+Advantages:
+
+* simpler synchronization syntax,
+* automatic memory management,
+* no HANDLE cleanup,
+* lower accidental complexity.
+
+Disadvantages:
+
+* less visibility into OS internals,
+* synchronization behavior is abstracted by JVM.
+
+The Java version required noticeably less infrastructure code because:
+
+* threads are managed as objects,
+* synchronization is integrated into the language,
+* resource cleanup is mostly handled automatically.
+
+Approximate metrics:
+
+| Metric | Value |
+|---|---|
+| Lines of code | ~220 |
+| Synchronization primitives | Moderate |
+| Boilerplate level | Lower |
+| Resource leak risk | Low |
+
+---
+
+### Main Observation
+
+The comparison demonstrates that:
+
+* the actual concurrency problem complexity remains almost unchanged,
+* most differences are related to API verbosity and runtime abstractions,
+* Java reduces implementation overhead,
+* C++/WinAPI exposes lower-level synchronization details.
+
+In practice:
+
+* Java improves development speed and readability,
+* C++ provides deeper control over operating system behavior.
+
+The comparison also shows that synchronization logic itself remains difficult regardless of language choice.
+
+Concurrency complexity is mostly algorithmic rather than syntactic.
+
+---
+
+### Testing Considerations
+
+Both implementations would require:
+
+* stress testing,
+* race-condition testing,
+* synchronization correctness validation,
+* deadlock scenario testing.
+
+Unit testing alone is insufficient for concurrent systems because many synchronization issues are timing-dependent.
+
+---
+
 ## 🖥️ Lab #4 — Process Synchronization
 
 ### Topic
